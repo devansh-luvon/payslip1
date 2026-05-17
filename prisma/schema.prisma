@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Employer ────────────────────────────────────────────────────────────────
+
+model Employer {
+  id            String      @id @default(cuid())
+  email         String      @unique
+  passwordHash  String
+  walletAddress String      @unique
+  name          String
+  companyName   String?
+  businessType  String?
+  contactPerson String?
+  kybStatus     KybStatus   @default(NOT_SUBMITTED)
+  isApproved    Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  workspaces   Workspace[]
+  kybDocuments KybDocument[]
+}
+
+enum KybStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model KybDocument {
+  id         String   @id @default(cuid())
+  employerId String
+  employer   Employer @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  docType    String   // "COMPANY_PROOF" | "ID_VERIFICATION"
+  fileUrl    String
+  createdAt  DateTime @default(now())
+}
+
+// ─── Workspace ───────────────────────────────────────────────────────────────
+
+model Workspace {
+  id         String    @id @default(cuid())
+  name       String
+  employerId String
+  employer   Employer  @relation(fields: [employerId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+
+  payrolls Payroll[]
+}
+
+// ─── Payroll ─────────────────────────────────────────────────────────────────
+
+model Payroll {
+  id             String        @id @default(cuid())
+  name           String
+  workspaceId    String
+  workspace      Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  employerWallet String
+  token          String        @default("USDC")
+  payrollType    PayrollType
+  totalAmount    Decimal       @default(0) @db.Decimal(20, 7)
+  platformFee    Decimal       @default(0) @db.Decimal(20, 7)
+  status         PayrollStatus @default(DRAFT)
+  contractId     String?       // deployed Soroban contract address
+  fundTxHash     String?       // Stellar tx hash of funding transaction
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  workers        Worker[]
+  milestones     Milestone[]
+  scheduledTasks ScheduledTask[]
+}
+
+enum PayrollType {
+  MILESTONE
+  SCHEDULED
+}
+
+enum PayrollStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  FROZEN
+}
+
+// ─── Worker ──────────────────────────────────────────────────────────────────
+
+model Worker {
+  id               String    @id @default(cuid())
+  phoneHash        String
+  name             String
+  role             String?
+  payrollId        String
+  payroll          Payroll   @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  walletAddress    String?
+  encryptedSecret  String?   // AES-encrypted Stellar secret key
+  claimToken       String?   @unique
+  claimTokenExpiry DateTime?
+  isOnboarded      Boolean   @default(false)
+  otpCode          String?
+  otpExpiry        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  milestones     Milestone[]
+  scheduledTasks ScheduledTask[]
+
+  @@unique([phoneHash, payrollId])
+}
+
+// ─── Milestone ───────────────────────────────────────────────────────────────
+
+model Milestone {
+  id                 String          @id @default(cuid())
+  name               String
+  description        String?
+  amount             Decimal         @db.Decimal(20, 7)
+  expectedCompletion DateTime?
+  workerId           String
+  worker             Worker          @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  payrollId          String
+  payroll            Payroll         @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  status             MilestoneStatus @default(LOCKED)
+  submissionUrl      String?
+  submissionNote     String?
+  rejectionFeedback  String?
+  txHash             String?
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+enum MilestoneStatus {
+  LOCKED
+  PENDING_SUBMISSION
+  SUBMITTED
+  APPROVED
+  REJECTED
+  PAID
+}
+
+// ─── Scheduled Task ──────────────────────────────────────────────────────────
+
+model ScheduledTask {
+  id        String   @id @default(cuid())
+  name      String
+  amount    Decimal  @db.Decimal(20, 7)
+  workerId  String
+  worker    Worker   @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  payrollId String
+  payroll   Payroll  @relation(fields: [payrollId], references: [id], onDelete: Cascade)
+  isPaid    Boolean  @default(false)
+  txHash    String?
+  createdAt DateTime @default(now())
+}
+
+// ─── Admin ───────────────────────────────────────────────────────────────────
+
+model Admin {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         AdminRole @default(ADMIN)
+  createdAt    DateTime  @default(now())
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  COMPLIANCE
+}

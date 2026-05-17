@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  serverExternalPackages: ["@prisma/client", "bcryptjs", "@stellar/stellar-sdk"],
+  images: {
+    remotePatterns: [],
+  },
 };
 
 export default nextConfig;
